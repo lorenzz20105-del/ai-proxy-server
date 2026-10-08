@@ -21,7 +21,6 @@ pkg install -y python nodejs git
 
 # Install Python deps
 echo "Installing Python dependencies..."
-pip install --upgrade pip
 pip install fastapi uvicorn httpx pydantic
 
 # Install Node deps & build frontend

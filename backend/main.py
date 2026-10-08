@@ -25,6 +25,7 @@ from features import (
     record_failure, record_success, is_circuit_open, set_alias,
     resolve_model, list_aliases, usage_report, inc_request, inc_error,
     inc_cache_hit, prometheus_metrics,
+    track_tokens, track_latency, track_model_usage,
 )
 
 from config import (
@@ -199,6 +200,8 @@ async def get_stats():
                 "healthy": a.healthy,
                 "requests": a.request_count,
                 "errors": a.error_count,
+                "success_rate": round((a.request_count - a.error_count) / max(a.request_count, 1) * 100, 1),
+                "last_used_ago": int(time.time() - a.last_used) if a.last_used > 0 else None,
                 "models": a.models,
                 "provider_type": a.provider_type,
                 "location": a.location,
@@ -229,6 +232,31 @@ async def clear_logs():
     request_logs.clear()
     return {"status": "ok"}
 
+
+@app.get("/admin/logs/account/{name}", dependencies=[Depends(verify_key)])
+async def get_logs_by_account(name: str, limit: int = 100):
+    filtered = [l for l in request_logs if l.get("account") == name]
+    return {"logs": filtered[-limit:][::-1]}
+
+@app.get("/admin/logs/model/{model}", dependencies=[Depends(verify_key)])
+async def get_logs_by_model(model: str, limit: int = 100):
+    filtered = [l for l in request_logs if l.get("model") == model]
+    return {"logs": filtered[-limit:][::-1]}
+
+@app.get("/admin/export-logs", dependencies=[Depends(verify_key)])
+async def export_logs():
+    import io, csv
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["time", "model", "account", "location", "status", "latency", "stream"])
+    for l in request_logs:
+        w.writerow([
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(l.get("timestamp", 0))),
+            l.get("model", ""), l.get("account", ""), l.get("location", ""),
+            l.get("status", ""), l.get("latency", ""), l.get("stream", ""),
+        ])
+    return JSONResponse(content=buf.getvalue(), media_type="text/csv")
+
 @app.get("/admin/locations", dependencies=[Depends(verify_key)])
 async def list_locations():
     locations = {}
@@ -237,6 +265,31 @@ async def list_locations():
         locations.setdefault(loc, []).append(a.name)
     return {"locations": locations}
 
+
+
+@app.post("/admin/health-check", dependencies=[Depends(verify_key)])
+async def health_check():
+    """Test connectivity to all accounts."""
+    results = []
+    for a in state.accounts:
+        if not a.enabled:
+            results.append({"name": a.name, "status": "disabled"})
+            continue
+        try:
+            async with client_for(a, 10.0) as client:
+                if a.provider_type == "google":
+                    url = f"{a.base_url}/models?key={a.api_key}"
+                    resp = await client.get(url)
+                elif a.provider_type == "claude":
+                    url = f"{a.base_url}/messages"
+                    resp = await client.post(url, json={"model": a.models[0] if a.models else "claude-3-sonnet-20240229", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]})
+                else:
+                    url = f"{a.base_url}/models"
+                    resp = await client.get(url)
+                results.append({"name": a.name, "status": "ok" if resp.status_code < 400 else f"error_{resp.status_code}", "status_code": resp.status_code})
+        except Exception as e:
+            results.append({"name": a.name, "status": "unreachable", "error": str(e)[:100]})
+    return {"results": results}
 
 @app.get("/admin/usage", dependencies=[Depends(verify_key)])
 async def get_usage():
@@ -374,8 +427,13 @@ async def chat_completions(request: Request):
                 # Track cost
                 usage = resp_data.get("usage", {})
                 if usage:
-                    cost = track_cost(real_model, account.name, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                    pt = usage.get("prompt_tokens", 0)
+                    ct = usage.get("completion_tokens", 0)
+                    cost = track_cost(real_model, account.name, pt, ct)
                     record_spend(cost)
+                    track_tokens(account.name, real_model, pt, ct)
+                track_latency(account.name, real_model, time.time() - start)
+                track_model_usage(real_model)
                 record_success(account.name)
                 return JSONResponse(content=resp_data, status_code=resp.status_code)
     except Exception as e:
@@ -400,6 +458,7 @@ async def embeddings(request: Request):
     try:
         async with client_for(account, 60.0) as client:
             resp = await client.post(upstream_url, json=body, headers=headers)
+            track_model_usage(body.get("model", "unknown"))
             add_log({"timestamp": start, "model": body.get("model", "?"), "account": account.name,
                      "status": resp.status_code, "latency": round(time.time() - start, 2), "endpoint": "embeddings",
                      "location": account.location})
@@ -424,6 +483,7 @@ async def image_generations(request: Request):
     try:
         async with client_for(account) as client:
             resp = await client.post(upstream_url, json=body, headers=headers)
+            track_model_usage(body.get("model", "unknown"))
             add_log({"timestamp": start, "model": body.get("model", "?"), "account": account.name,
                      "status": resp.status_code, "latency": round(time.time() - start, 2), "endpoint": "images",
                      "location": account.location})

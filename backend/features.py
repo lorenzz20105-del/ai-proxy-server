@@ -191,6 +191,9 @@ def usage_report() -> dict:
         "cache": cache_stats(),
         "budget": budget_status(),
         "aliases": list_aliases(),
+        "tokens": token_report(),
+        "latency": latency_report(),
+        "model_usage": model_usage_report(),
     }
 
 # ── Prometheus-style Metrics ───────────────────────────────────────────────
@@ -228,3 +231,61 @@ def prometheus_metrics() -> str:
             f"aiproxy_cache_hits_total {_cache_hits}",
         ]
         return "\n".join(lines) + "\n"
+
+
+# ── Token Usage Tracking ───────────────────────────────────────────────────
+_token_lock = threading.Lock()
+_tokens_by_account: dict[str, dict] = defaultdict(lambda: {"prompt": 0, "completion": 0, "total": 0})
+_tokens_by_model: dict[str, dict] = defaultdict(lambda: {"prompt": 0, "completion": 0, "total": 0})
+
+def track_tokens(account: str, model: str, prompt_tokens: int, completion_tokens: int):
+    with _token_lock:
+        for key, pt, ct in [(account, prompt_tokens, completion_tokens), (model, prompt_tokens, completion_tokens)]:
+            target = _tokens_by_account if key == account else _tokens_by_model
+            target[key]["prompt"] += pt
+            target[key]["completion"] += ct
+            target[key]["total"] += pt + ct
+
+def token_report() -> dict:
+    with _token_lock:
+        return {
+            "by_account": {k: dict(v) for k, v in _tokens_by_account.items()},
+            "by_model": {k: dict(v) for k, v in _tokens_by_model.items()},
+        }
+
+# ── Latency Tracking ───────────────────────────────────────────────────────
+_latency_lock = threading.Lock()
+_latency_by_account: dict[str, list] = defaultdict(list)
+_latency_by_model: dict[str, list] = defaultdict(list)
+
+def track_latency(account: str, model: str, latency: float):
+    with _latency_lock:
+        _latency_by_account[account].append(latency)
+        _latency_by_model[model].append(latency)
+        # Keep last 100
+        if len(_latency_by_account[account]) > 100:
+            _latency_by_account[account] = _latency_by_account[account][-100:]
+        if len(_latency_by_model[model]) > 100:
+            _latency_by_model[model] = _latency_by_model[model][-100:]
+
+def latency_report() -> dict:
+    with _latency_lock:
+        def stats(lst):
+            if not lst: return None
+            return {"avg": round(sum(lst)/len(lst), 3), "min": round(min(lst), 3), "max": round(max(lst), 3), "count": len(lst)}
+        return {
+            "by_account": {k: stats(v) for k, v in _latency_by_account.items()},
+            "by_model": {k: stats(v) for k, v in _latency_by_model.items()},
+        }
+
+# ── Model Usage Stats ──────────────────────────────────────────────────────
+_model_lock = threading.Lock()
+_model_usage: dict[str, int] = defaultdict(int)
+
+def track_model_usage(model: str):
+    with _model_lock:
+        _model_usage[model] += 1
+
+def model_usage_report() -> dict:
+    with _model_lock:
+        return dict(sorted(_model_usage.items(), key=lambda x: -x[1]))

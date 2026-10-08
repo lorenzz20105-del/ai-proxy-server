@@ -51,6 +51,8 @@ function Dashboard() {
         <div className="card"><h3>{Object.keys(locations || {}).length}</h3><p>Locations</p></div>
         <div className="card"><h3>{usage?.cost?.total_usd ? `$${usage.cost.total_usd.toFixed(4)}` : '—'}</h3><p>Total Cost</p></div>
         <div className="card"><h3>{usage?.cache?.entries ?? 0}</h3><p>Cache Entries</p></div>
+        <div className="card"><h3>{usage?.tokens?.by_account ? Object.values(usage.tokens.by_account).reduce((s, t) => s + t.total, 0) : 0}</h3><p>Total Tokens</p></div>
+        <div className="card"><h3>{usage?.latency?.by_account ? Object.values(usage.latency.by_account).find(l => l)?.avg ?? '—' : '—'}s</h3><p>Avg Latency</p></div>
       </div>
 
       {locations && (
@@ -71,19 +73,55 @@ function Dashboard() {
         <>
           <h2>Cost by Model</h2>
           <table>
-            <thead><tr><th>Model</th><th>Cost (USD)</th></tr></thead>
+            <thead><tr><th>Model</th><th>Cost (USD)</th><th>Tokens</th><th>Avg Latency</th></tr></thead>
             <tbody>
               {Object.entries(usage.cost.by_model).map(([m, c]) => (
-                <tr key={m}><td><code>{m}</code></td><td>${c.toFixed(4)}</td></tr>
+                <tr key={m}>
+                  <td><code>{m}</code></td>
+                  <td>${c.toFixed(4)}</td>
+                  <td>{usage?.tokens?.by_model?.[m]?.total ?? 0}</td>
+                  <td>{usage?.latency?.by_model?.[m]?.avg != null ? `${usage.latency.by_model[m].avg}s` : '—'}</td>
+                </tr>
               ))}
             </tbody>
           </table>
         </>
       )}
 
-      <h2>Accounts</h2>
+      {usage?.model_usage && Object.keys(usage.model_usage).length > 0 && (
+        <>
+          <h2>Model Usage</h2>
+          <table>
+            <thead><tr><th>Model</th><th>Requests</th></tr></thead>
+            <tbody>
+              {Object.entries(usage.model_usage).map(([m, count]) => (
+                <tr key={m}><td><code>{m}</code></td><td>{count}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {usage?.tokens?.by_account && Object.keys(usage.tokens.by_account).length > 0 && (
+        <>
+          <h2>Token Usage by Account</h2>
+          <table>
+            <thead><tr><th>Account</th><th>Prompt</th><th>Completion</th><th>Total</th></tr></thead>
+            <tbody>
+              {Object.entries(usage.tokens.by_account).map(([name, t]) => (
+                <tr key={name}><td><code>{name}</code></td><td>{t.prompt}</td><td>{t.completion}</td><td>{t.total}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      <div className="row between">
+        <h2>Accounts</h2>
+        <button className="small" onClick={async () => { const r = await api.healthCheck(); alert(JSON.stringify(r.results.map(x => `${x.name}: ${x.status}`), null, 2)); }}>Health Check</button>
+      </div>
       <table>
-        <thead><tr><th>Name</th><th>Type</th><th>Location</th><th>Status</th><th>Requests</th><th>Errors</th><th>Models</th></tr></thead>
+        <thead><tr><th>Name</th><th>Type</th><th>Location</th><th>Status</th><th>Requests</th><th>Errors</th><th>Success</th><th>Tokens</th><th>Avg Latency</th><th>Last Used</th><th>Models</th></tr></thead>
         <tbody>
           {stats.accounts.map(a => (
             <tr key={a.name}>
@@ -93,6 +131,10 @@ function Dashboard() {
               <td><Badge ok={a.healthy && a.enabled}>{a.enabled ? (a.healthy ? 'Healthy' : 'Down') : 'Disabled'}</Badge></td>
               <td>{a.requests}</td>
               <td>{a.errors}</td>
+              <td>{a.success_rate != null ? `${a.success_rate}%` : '—'}</td>
+              <td>{usage?.tokens?.by_account?.[a.name]?.total ?? 0}</td>
+              <td>{usage?.latency?.by_account?.[a.name]?.avg != null ? `${usage.latency.by_account[a.name].avg}s` : '—'}</td>
+              <td>{a.last_used_ago != null ? `${a.last_used_ago}s ago` : 'never'}</td>
               <td>{a.models?.join(', ')}</td>
             </tr>
           ))}
@@ -179,6 +221,7 @@ function Providers() {
               <td><Badge ok={a.enabled}>{a.enabled ? 'Yes' : 'No'}</Badge></td>
               <td>
                 <button className="small" onClick={() => edit(a)}>Edit</button>{' '}
+                <button className={a.enabled ? 'small danger' : 'small'} onClick={async () => { await api.updateAccount(a.name, { ...a, enabled: !a.enabled }); load(); }}>{a.enabled ? 'Disable' : 'Enable'}</button>{' '}
                 <button className="small danger" onClick={() => del(a.name)}>Delete</button>
               </td>
             </tr>
@@ -229,6 +272,7 @@ function Playground() {
           <pre>{response}</pre>
         </>
       )}
+      {err && err.includes('502') && <p className="muted">Tip: check which account is healthy in the Dashboard.</p>}
     </div>
   );
 }
@@ -242,7 +286,22 @@ function Logs() {
     <div>
       <div className="row between">
         <h2>Request Logs</h2>
-        <button className="small danger" onClick={async () => { await api.clearLogs(); load(); }}>Clear</button>
+        <div className="row">
+          <select onChange={async (e) => {
+            const name = e.target.value;
+            if (name) { const r = await api.logsByAccount(name); setLogs(r.logs); }
+            else load();
+          }} style={{width: 'auto', marginBottom: 0}}>
+            <option value="">All accounts</option>
+            {logs.map(l => l.account).filter((v,i,a) => a.indexOf(v) === i).map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <button className="small" onClick={async () => {
+            const csv = await api.exportLogs();
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'logs.csv'; a.click();
+          }}>Export CSV</button>
+          <button className="small danger" onClick={async () => { await api.clearLogs(); load(); }}>Clear</button>
+        </div>
       </div>
       <table>
         <thead><tr><th>Time</th><th>Model</th><th>Account</th><th>Location</th><th>Status</th><th>Latency</th><th>Stream</th></tr></thead>

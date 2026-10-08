@@ -34,6 +34,8 @@ export const api = {
   clearLogs: () => req('/admin/logs', { method: 'DELETE' }),
   models: () => req('/v1/models'),
   locations: () => req('/admin/locations'),
+  logsByAccount: (name) => req(`/admin/logs/account/${name}`),
+  exportLogs: () => req('/admin/export-logs'),
   usage: () => req('/admin/usage'),
   cache: () => req('/admin/cache'),
   clearCache: () => req('/admin/cache', { method: 'DELETE' }),
@@ -42,4 +44,6 @@ export const api = {
   aliases: () => req('/admin/aliases'),
   addAlias: (alias, targets) => req('/admin/alias?alias=' + encodeURIComponent(alias) + '&targets=' + encodeURIComponent(targets.join(',')), { method: 'POST' }),
   testChat: (model, message) => req('/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model, messages: [{ role: 'user', content: message }] }) }),
+  healthCheck: () => req('/admin/health-check', { method: 'POST' }),
+  toggleAccount: (name, enabled) => req(`/admin/accounts/${name}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
 };

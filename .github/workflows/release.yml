@@ -29,8 +29,11 @@ jobs:
 
       - name: Package source
         run: |
-          git archive --format=tar.gz --prefix=aiproxy/ -o dist.tar.gz HEAD
-          tar --append --file=dist.tar.gz --transform='s,^frontend/dist,aiproxy/frontend/dist,' frontend/dist
+          # tar --append cannot update a compressed archive, so build the tar
+          # uncompressed, splice the built dashboard in, then gzip.
+          git archive --format=tar --prefix=aiproxy/ -o dist.tar HEAD
+          tar --append --file=dist.tar --transform='s,^frontend/dist,aiproxy/frontend/dist,' frontend/dist
+          gzip -9 dist.tar
 
       - uses: actions/upload-artifact@v4
         with:

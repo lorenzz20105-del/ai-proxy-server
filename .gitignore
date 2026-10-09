@@ -1,9 +1,39 @@
+# python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# node
 node_modules/
 dist/
+.vite/
+
+# runtime state
+backend/data/
+*.db
+*.db-wal
+*.db-shm
 proxy_config.json
 proxy_logs.json
+
+# secrets
 .env
+*.pem
+*.jks
+*.keystore
+
+# build output
+build/
+*.apk
+*.aab
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
 *.log

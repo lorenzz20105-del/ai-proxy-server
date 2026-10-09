@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AI Proxy</string>
+    <string name="tab_overview">Overview</string>
+    <string name="tab_accounts">Accounts</string>
+    <string name="tab_traffic">Traffic</string>
+    <string name="tab_settings">Settings</string>
+    <string name="action_playground">Playground</string>
+    <string name="hint_server">http://192.168.1.10:8000</string>
+    <string name="hint_key">sk-proxy-…</string>
+</resources>

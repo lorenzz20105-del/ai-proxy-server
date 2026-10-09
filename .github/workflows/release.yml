@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements-dev.txt
+      - working-directory: backend
+        run: python -m pytest -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - working-directory: frontend
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+      - working-directory: frontend
+        run: npm run build
+
+      - name: Package source
+        run: |
+          cd frontend && rm -rf dist && cd ..
+          git archive --format=tar.gz --prefix=aiproxy/ -o dist.tar.gz HEAD
+          tar --append --file=dist.tar.gz --transform='s,^frontend/dist,aiproxy/frontend/dist,' frontend/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aiproxy-source
+          path: dist.tar.gz

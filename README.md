@@ -150,11 +150,12 @@ caching, quota failover, egress assignment, desktop identity. No emulator requir
 
 ```bash
 node android/harness/verify-dashboard.mjs   # against a running instance
+node android/harness/layout-checks.mjs      # desktop + phone viewport checks
 ```
 
-Covers key creation from the Overview, base-URL rendering, snippet tabs, and that a revealed key
-is masked out of the page once dismissed. `layout.mjs`-style checks verify desktop and phone
-viewports for overflow and clipped text.
+`verify-dashboard.mjs` covers key creation from the Overview, base-URL rendering, snippet tabs,
+and that a revealed key is masked out of the page once dismissed. `layout-checks.mjs` runs both
+viewports and fails on horizontal overflow, clipped text or console errors.
 
 ---
 

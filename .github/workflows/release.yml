@@ -29,7 +29,6 @@ jobs:
 
       - name: Package source
         run: |
-          cd frontend && rm -rf dist && cd ..
           git archive --format=tar.gz --prefix=aiproxy/ -o dist.tar.gz HEAD
           tar --append --file=dist.tar.gz --transform='s,^frontend/dist,aiproxy/frontend/dist,' frontend/dist
 

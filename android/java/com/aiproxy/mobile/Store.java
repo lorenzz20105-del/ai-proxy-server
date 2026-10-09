@@ -29,6 +29,15 @@ public final class Store extends SQLiteOpenHelper {
 
     private static Store instance;
 
+    /**
+     * Master key handed to the admin API and the bundled console.
+     *
+     * <p>A fixed value on purpose: the proxy binds loopback only, and the console
+     * must clear its key gate on first launch with nothing to type. Matches the
+     * backend's {@code DEFAULT_MASTER_KEY} so both engines accept one known key.
+     */
+    public static final String DEFAULT_MASTER_KEY = "sk-proxy-default-master-key";
+
     private final Map<String, Account> accounts = new LinkedHashMap<>();
     private final Map<String, String> aliases = new LinkedHashMap<>();
     private final Map<String, String> keys = new LinkedHashMap<>();
@@ -134,12 +143,12 @@ public final class Store extends SQLiteOpenHelper {
             cursor.close();
         }
 
-        masterKey = getKv("master_key");
-        if (masterKey == null) {
-            masterKey = "sk-proxy-" + Long.toHexString(System.nanoTime())
-                    + Integer.toHexString((int) (System.currentTimeMillis() & 0xffffff));
-            putKv("master_key", masterKey);
-        }
+        // Fixed, documented default so the console is usable the moment the app
+        // opens — no generated key to hunt for. The server binds loopback only
+        // (127.0.0.1), never an external interface. Change the constant to roll
+        // a private key; the value is mirrored into the kv table for display.
+        masterKey = DEFAULT_MASTER_KEY;
+        putKv("master_key", masterKey);
 
         String routingJson = getKv("routing");
         if (routingJson != null) {

@@ -21,23 +21,28 @@ export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-arm64}"
 export PATH="$JAVA_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu/android:${LD_LIBRARY_PATH:-}"
 
+# Every tool is overridable so the same script builds on a phone (Debian aapt,
+# system JDK) and on CI (Android SDK build-tools, setup-java).
 AAPT="${AAPT:-aapt}"
+ZIPALIGN="${ZIPALIGN:-zipalign}"
+APKSIGNER="${APKSIGNER:-apksigner}"
 TOOLS="${APK_TOOLS:-$HOME/.cache/aiproxy-apk}"
 KEYSTORE="${APK_KEYSTORE:-$TOOLS/aiproxy.jks}"
 STOREPASS="${APK_KEYSTORE_PASSWORD:-android}"
 KEYALIAS="${APK_KEY_ALIAS:-ai-proxy}"
-R8_VERSION="8.5.35"
+R8_VERSION="${R8_VERSION:-8.5.35}"
 
 # aapt v1 cannot parse the resource table that ships with API 33+ platform jars,
 # so the compile SDK is pinned to Android 12. targetSdkVersion stays modern.
 PLATFORM_URL="https://dl.google.com/android/repository/platform-32_r01.zip"
-ANDROID_JAR="$TOOLS/android-32_r01.jar"
-R8_JAR="$TOOLS/r8.jar"
+# CI points this at $ANDROID_HOME/platforms/android-32/android.jar instead of downloading.
+ANDROID_JAR="${ANDROID_JAR:-$TOOLS/android-32_r01.jar}"
+R8_JAR="${R8_JAR:-$TOOLS/r8.jar}"
 
 MIN_SDK=24
 TARGET_SDK=34
-VERSION_CODE=30000
-VERSION_NAME=3.0.0
+VERSION_CODE=30001
+VERSION_NAME=3.0.1
 
 say() { printf '\033[1;36m==>\033[0m %s\n' "$1"; }
 
@@ -52,8 +57,8 @@ fetch() {
 mkdir -p "$TOOLS" "$(dirname "$OUT")"
 
 # ---------------------------------------------------------------- tools
-fetch "$PLATFORM_URL" "$TOOLS/platform.zip"
 if [ ! -s "$ANDROID_JAR" ]; then
+  fetch "$PLATFORM_URL" "$TOOLS/platform.zip"
   say "extracting android.jar"
   python3 - "$TOOLS/platform.zip" "$ANDROID_JAR" <<'PYEOF'
 import sys, zipfile
@@ -65,6 +70,7 @@ print("android.jar <-", name)
 PYEOF
   rm -f "$TOOLS/platform.zip"
 fi
+[ -s "$ANDROID_JAR" ] || { echo "android.jar missing: $ANDROID_JAR" >&2; exit 1; }
 
 fetch "https://dl.google.com/dl/android/maven2/com/android/tools/r8/$R8_VERSION/r8-$R8_VERSION.jar" "$R8_JAR"
 
@@ -134,10 +140,10 @@ cp "$BUILD/dex/classes.dex" "$BUILD/classes.dex"
 ( cd "$BUILD" && zip -q -X app-unsigned.apk classes.dex )
 
 say "aligning"
-zipalign -f -p 4 "$BUILD/app-unsigned.apk" "$BUILD/app-aligned.apk"
+"$ZIPALIGN" -f -p 4 "$BUILD/app-unsigned.apk" "$BUILD/app-aligned.apk"
 
 say "signing"
-apksigner sign \
+"$APKSIGNER" sign \
   --ks "$KEYSTORE" \
   --ks-pass "pass:$STOREPASS" \
   --key-pass "pass:$STOREPASS" \
@@ -147,5 +153,5 @@ apksigner sign \
   "$BUILD/app-aligned.apk"
 
 rm -f "$OUT.idsig"
-apksigner verify --verbose "$OUT" | sed 's/^/    /'
+"$APKSIGNER" verify --verbose "$OUT" | sed 's/^/    /'
 say "built $OUT ($(du -h "$OUT" | cut -f1))"

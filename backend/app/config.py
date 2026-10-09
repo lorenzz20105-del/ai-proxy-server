@@ -6,12 +6,17 @@ build runs on a VPS, in Docker and on a phone without code changes.
 from __future__ import annotations
 
 import os
-import secrets
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
 
-VERSION = "3.0.0"
+VERSION = "3.0.1"
+
+# The master key used when PROXY_MASTER_KEY is not set. It is a fixed, known
+# value on purpose: the proxy binds loopback by default and the bundled console
+# must be usable the moment the server starts, with no key hunting. Set
+# PROXY_MASTER_KEY (or change this) before exposing the port to anything.
+DEFAULT_MASTER_KEY = "sk-proxy-default-master-key"
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPO_DIR = BACKEND_DIR.parent
@@ -83,7 +88,8 @@ class Settings:
     trust_forwarded: bool = env_bool("PROXY_TRUST_FORWARDED", True)
 
     # ── auth ──────────────────────────────────────────────────────────────
-    master_key: str = env_str("PROXY_MASTER_KEY", "") or "sk-proxy-" + secrets.token_urlsafe(32)
+    master_key: str = env_str("PROXY_MASTER_KEY", "") or DEFAULT_MASTER_KEY
+    using_default_master_key: bool = not bool(env_str("PROXY_MASTER_KEY", ""))
     generate_master_key: bool = env_bool("PROXY_GENERATE_MASTER_KEY", False)
     encryption_key: str = env_str("PROXY_ENCRYPTION_KEY", "")
 

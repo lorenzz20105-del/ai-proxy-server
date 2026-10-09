@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class Server implements Http.Handler {
 
-    private static final String VERSION = "3.0.0";
+    private static final String VERSION = "3.0.1";
 
     private final Context context;
     private final AssetManager assets;

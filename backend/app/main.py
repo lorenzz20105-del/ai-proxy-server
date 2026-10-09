@@ -13,13 +13,13 @@ from typing import Any, AsyncIterator
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .admin import admin as admin_router
 from .api import api as api_router
 from .clientpool import client_pool
-from .config import VERSION, settings
+from .config import DEFAULT_MASTER_KEY, VERSION, settings
 from .metrics import metrics
 from .registry import registry
 from .security import secret_box
@@ -108,8 +108,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tasks.append(asyncio.create_task(active_probe_loop()))
 
     log.info("AI Proxy %s ready on http://%s:%s", VERSION, settings.host, settings.port)
-    log.info("master key: %s…  (encryption: %s)", settings.master_key[:12],
-             secret_box.mode)
+    if settings.using_default_master_key:
+        log.info("master key: %s  (built-in default — set PROXY_MASTER_KEY to change it)",
+                 settings.master_key)
+    else:
+        log.info("master key: %s…  (from PROXY_MASTER_KEY)", settings.master_key[:12])
+    log.info("encryption: %s", secret_box.mode)
 
     try:
         yield
@@ -251,6 +255,22 @@ app.include_router(api_router)
 app.include_router(admin_router)
 
 if FRONTEND_DIST.exists():
+    @app.get("/app/", include_in_schema=False)
+    async def dashboard_boot():
+        """Serve the console, pre-seeding the default key so the gate clears itself.
+
+        Only the built-in default is injected — it is a public, documented value.
+        A custom PROXY_MASTER_KEY is never written into the page.
+        """
+        html = (FRONTEND_DIST / "index.html").read_text(encoding="utf-8")
+        if settings.using_default_master_key:
+            seed = (
+                "<script>try{localStorage.getItem('aiproxy.api_key')||"
+                f"localStorage.setItem('aiproxy.api_key','{DEFAULT_MASTER_KEY}')}}catch(e){{}}</script>"
+            )
+            html = html.replace("<head>", "<head>\n    " + seed, 1)
+        return HTMLResponse(html)
+
     app.mount("/app", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="dashboard")
 else:  # dev convenience: still answer /app so the SPA router does not 404
     @app.get("/app")

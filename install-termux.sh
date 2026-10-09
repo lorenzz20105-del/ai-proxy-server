@@ -33,12 +33,17 @@ cd ..
 # Create start script
 cat > start.sh << 'STARTEOF'
 #!/data/data/com.termux/files/usr/bin/bash
-cd "$(dirname "$0")/backend"
-PROXY_MASTER_KEY="${PROXY_MASTER_KEY:-$(openssl rand -hex 16)}" \
-  python -m uvicorn main:app --host 0.0.0.0 --port "${PORT:-8000}"
+# AI Proxy launcher.
+# The master key falls back to the built-in default so the console is usable
+# immediately; export PROXY_MASTER_KEY to override, or HOST=0.0.0.0 to expose
+# the proxy on the LAN (do that only with your own master key set).
+cd "$(cd "$(dirname "$0")" && pwd)/backend"
+PROXY_MASTER_KEY="${PROXY_MASTER_KEY:-sk-proxy-default-master-key}" \
+  python -m uvicorn app.main:app --host "${HOST:-127.0.0.1}" --port "${PORT:-8000}"
 STARTEOF
 chmod +x start.sh
 
 echo -e "${GREEN}=== Done! ===${NC}"
 echo "Run: ./start.sh"
 echo "Dashboard: http://localhost:8000/app/"
+echo "Master key: sk-proxy-default-master-key  (set PROXY_MASTER_KEY to change)"

@@ -68,10 +68,23 @@ embedded brand marks, no network call.
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-PROXY_MASTER_KEY=sk-your-master-key python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Open `http://127.0.0.1:8000/app/` for the dashboard.
+
+### The master key
+
+There is a built-in default, so nothing has to be generated or hunted for:
+
+```
+sk-proxy-default-master-key
+```
+
+The console is seeded with it automatically and clears its own key gate — the value is public
+and fixed, which is safe because the server binds loopback. Set `PROXY_MASTER_KEY` to use your
+own; a custom key is **never** injected into the page, so the console asks for it once. The
+Android APK uses the same default (`Store.DEFAULT_MASTER_KEY`).
 
 ### Dashboard
 

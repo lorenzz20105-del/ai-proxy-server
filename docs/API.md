@@ -51,7 +51,7 @@ Status codes used: `400 invalid_request_error`, `401 invalid_api_key`,
 
 ### `GET /health`
 ```json
-{"status":"ok","version":"3.0.0","uptime_s":1832.4,
+{"status":"ok","version":"3.0.1","uptime_s":1832.4,
  "accounts":{"total":4,"enabled":4,"healthy":3,"degraded":false},
  "db":{"ok":true,"latency_ms":0.4},"cache":{"entries":12,"hits":88,"misses":9}}
 ```
@@ -267,7 +267,7 @@ The **full key is returned exactly once**, in the response to `POST /admin/keys`
 
 #### `GET /admin/config`
 ```json
-{"version":"3.0.0","data_dir":"/data/…/ai-proxy-server/data","db":"sqlite",
+{"version":"3.0.1","data_dir":"/data/…/ai-proxy-server/data","db":"sqlite",
  "encryption":"fernet"|"plaintext","master_key_masked":"sk-…",
  "server":{"host":"0.0.0.0","port":8000,"request_timeout_s":120,"stream_timeout_s":900},
  "limits":{"max_body_bytes":10485760,"max_concurrency":0},

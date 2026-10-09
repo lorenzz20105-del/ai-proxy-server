@@ -1,7 +1,7 @@
 services:
   aiproxy:
     build: .
-    image: aiproxy:3.0.0
+    image: aiproxy:3.0.1
     container_name: aiproxy
     restart: unless-stopped
     ports:
